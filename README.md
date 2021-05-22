@@ -45,4 +45,7 @@ On the folder, you will find <b>4 documents: </b>
   - <b><i>report.Rmd</i></b> : a Rmarkdown where we analyse the data. (To run this Rmd set the directory of RStudio to where this file is saved.)
 
    
-  - <b><i>report.pdf</i></b> : a PDF file with the Rmarkdown output.
+- <b><i>my_header.tex</i></b> : a Tex file with parameters for the Rmkardown output.
+
+
+- <b><i>report.pdf</i></b> : a PDF file with the Rmarkdown output.
