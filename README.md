@@ -32,7 +32,7 @@ This dataset is availabe on the folder Zip_Data, and to be used it needs to be u
 ## Project Description
 
 
-On the folder, you will find <b>7 documents: </b> 
+On the folder, you will find <b>4 documents: </b> 
   
 
   - <b><i>README.md</i></b> : this document describing all data sets used and what was developed in the project;
