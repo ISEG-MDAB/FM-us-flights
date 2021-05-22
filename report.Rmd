@@ -1,0 +1,1019 @@
+---
+title: "US Flight Data Analysis"
+subtitle: "Forecasting Methods - Report"
+author:
+  - André Viana^[l54543, andreviana@aln.iseg.ulisboa.pt]
+  - Gonçalo Duarte^[l48505, goncaloduarte@aln.iseg.ulisboa.pt]
+  - José Cabral^[l54997, l54997@aln.iseg.ulisboa.pt]
+date: May 2021
+
+abstract: >
+  Nowadays, as easy as it is for any of us to travel from one city to another, one country to another, the flight industry is expected to be extremely profitable and resourceful. With hundreads of thousands of registered flights per day, there is a big volume of data possible to be analized.
+  The year of 2020 brought change to our lives. Being hit by a pandemic changes the way all of us think and look at the world around us. Do we feel safe to travel in the next months? Can we even travel? Some questions arose last year and for many of them there are no answers yet. What we do know is that the way we travel has changed. That impacts numbers of the aviation industry.
+  Despite being one single country, there are more than five thousand public airports across the USA. Some of these airports have tremendous traffic - which provides a huge amount of data possible to be analyzed. Develop analysis on flight data means providing - or trying to provide - answers to many questions, such as: how much did the number of flights decreased from 2019 to 2020 due to COVID 19? Is there a seasonality regarding the number of flights? Do cancellation rates follow a trend? How can we predict the number of flights on the next months based on past data?
+  We hope to explore this questions and be able to provide meaningful answers.
+  
+output:
+  pdf_document:
+    includes:  
+      in_header: my_header.tex
+---
+
+\thispagestyle{empty}
+\newpage
+\tableofcontents
+\newpage
+\listoftables
+\newpage
+\listoffigures
+\newpage
+## Introduction
+
+  This project aims at analyzing US flights – available at the Bureau of Transportation Statistics of United States Department of Transportations database – explore its evolution over the years concerning number of flights and flights cancellations
+  Living through a pandemic is an unprecedented situation (in the most recent decades) that surely took a tool on the travel industry. Further on the project, it will be possible to visualize the evolution of the number of flights by month and year. An intense decrease is expected when comparing 2020 to previous years.
+  We will focus our attention on four different airports:
+  
+  * Anchorage, AK: Ted Stevens Anchorage International
+  * Chicago, IL: Chicago O\'Hare International
+  * Los Angeles, CA: Los Angeles International
+  * New York, NY: LaGuardia
+
+since these are some of the airports with the most traffic within their states. As well as the number of flights, this project also analysis patterns regarding the cancellation rates.
+
+***Disclaimer:*** The initial goal of the project was to develop analysis on flight data from New York airports. After an initial look at the series, we considered it was best for our project to work with airports from different states, since there is more heterogeneity.
+
+For the purpose of this project, the analysis is developed on data until the end of 2019 (due to the out of ordinary changes that happened in 2020). A comparison with 2020 data is displayed on the end of the project.
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library('tidyverse')
+library('fpp3')
+```
+
+```{r include=FALSE}
+
+df <- read.csv(file = 'Data/monthly_data.csv')%>%
+  mutate(FL_DATE = yearmonth(FL_DATE)) %>%
+  filter(year(FL_DATE) <= 2019) %>%
+  as_tsibble(key = 'Description', index = 'FL_DATE')
+
+df_2020 <- read.csv(file = 'Data/monthly_data.csv')%>%
+  mutate(FL_DATE = yearmonth(FL_DATE)) %>%
+  filter(year(FL_DATE) == 2020) %>%
+  as_tsibble(key = 'Description', index = 'FL_DATE')
+
+df_train <- df %>%
+  filter(FL_DATE <= yearmonth('2019 Jun'))
+
+df_test <- df %>%
+  filter(FL_DATE > yearmonth('2019 Jun'))
+
+states <- vector(mode="list", length=4)
+names(states) <- c('ak','il','ca','ny')
+states[[1]] <- 'Anchorage, AK: Ted Stevens Anchorage International'
+states[[2]] <- 'Chicago, IL: Chicago O\'Hare International'
+states[[3]] <- 'Los Angeles, CA: Los Angeles International'
+states[[4]] <- 'New York, NY: LaGuardia'
+
+for (i in 1:length(states)) { 
+  assign(names(states)[i], df %>%
+    filter(Description == states[i]))
+}
+
+states <- vector(mode="list", length=4)
+names(states) <- c('ak_train','il_train','ca_train','ny_train')
+states[[1]] <- 'Anchorage, AK: Ted Stevens Anchorage International'
+states[[2]] <- 'Chicago, IL: Chicago O\'Hare International'
+states[[3]] <- 'Los Angeles, CA: Los Angeles International'
+states[[4]] <- 'New York, NY: LaGuardia'
+
+for (i in 1:length(states)) { 
+  assign(names(states)[i], df_train %>%
+    filter(Description == states[i]))
+}
+```
+
+## 1. Time Series Plots
+
+For this project we decided to use the airports with more flights from the following states : Illinois, Alaska, California and New York.
+
+On the plots below, it is possible to look at the behavior of both the number of flights (Figure 1) and the cancellation rates (Figure 2) for the four airports from January 2010 until December 2019.
+
+```{r a, echo=FALSE, fig.width=15, fig.cap='Airports - Number of Flights'}
+df %>% 
+  autoplot(N_FLIGHTS) +
+  ggtitle("Airports - Number of Flights") + 
+  ylab("Number of Flights") + xlab('')
+```
+
+```{r, echo=FALSE, fig.width=15, fig.cap='Airports - Cancellation Rate'}
+df %>% autoplot(CANC_RATE) +
+  ggtitle("Airports - Cancellation Rate") + 
+  ylab("Cancelation Rate") + xlab('')
+```
+
+A total of 8 time series integrates our project:
+
+ * 4 on number of flights (one per airport);
+ * 4 on rate of cancellations (one per airport).
+ 
+After visualizing the series, we will now focus on seasonal behaviors. For that, two sets of plots will be displayed: **seasonal plots** and **seasonal subseries plots**:
+
+### Seasonal Plots
+
+On the plot below, once again, two plots are displayed (1st regarding total number of flights, 2nd regarding the cancellation rate). On each of the plots, there are individual analysis for each airport that will allow us to understand how numbers change from month to month on each year. (one line per year)
+
+```{r, echo=FALSE, fig.width=15, fig.cap='Seasonal plot - Number of Flights'}
+df %>% gg_season(N_FLIGHTS) +
+  ggtitle("Seasonal plot - Number of Flights") +
+  xlab('') + ylab('Number of Flights')
+```
+
+```{r, echo=FALSE, fig.width=15, fig.cap='Seasonal plot - Cancelation Rate'}
+df %>% gg_season(CANC_RATE) +
+  ggtitle("Seasonal plot - Cancelation Rate") +
+  xlab('') + ylab('Number of Flights')
+```
+
+Taking in consideration the previous visuals, note that, regarding **number of flights**:
+
+  * Ted Stevens Anchorage International: increase between June and August;  
+  * Chicago O'Hare International: registered an increase between June and August;
+  * Los Angeles International:  also has an increase between June and August; 
+  * La Guardia: Not so strong seasonal effect but has a huge increase in 2018.
+  
+When it comes to the **cancellation rate**, all four airports show some instability in the beginning of the year, across all years. From March to August, cancellation rates tend to decrease a bit and then increase towards the end of the year. A special attention to La Guardia, that saw an uncharacteristic increase on October 2012, comparing to the same month of the remaining years.
+
+
+### Seasonal Subseries Plots
+
+One different way to analyze and compare months from year to year is by plotting subseries - where it is possible to visualize, for each month, how the series behaves each year. Once again, two plots corresponding to the two features studied on this project:
+
+```{r, echo=FALSE, fig.width=15, fig.cap='Sub seasonal plot - Number of Flights'}
+df %>% gg_subseries(N_FLIGHTS) +
+  ggtitle("Sub seasonal plot - Number of Flights") + 
+  xlab('') + ylab('Number of Flights')
+```
+
+```{r, echo=FALSE, fig.width=15, fig.cap='Sub seasonal plot - Cancellation Rate'}
+df %>% gg_subseries(CANC_RATE) +
+  ggtitle("Sub seasonal plot - Cancellation Rate") + 
+  xlab('') + ylab('Number of Flights')
+```
+
+To complement previous comments, note that La Guardia has a fairly constant average number of flights monthly across all months of the year (*blue line represents the average*), having suffered an increase on most recent years.
+
+Once again, just like on the previous analysis, regarding cancellations rates, they tend to be heigher (on average) and more inconsistent on the beggining of the year, decreasing after the first trimester. If we take a look, on October for La Guardia (regarding cancellation rates) there is a spike on 2012, which corresponds to the comments made on the previous seasonal plots.
+
+Note that these two sets of plots (seasonal and seasonal subseries) allow us to interpret the same data from different "angles".
+
+### ACF Plots
+
+Autocorrelation Function is a measure of the relationships between lagged values of a time series. By taking a look of correlograms (plot of the ACF) it is possible to identify possible seasonal and trend components.
+
+```{r, echo=FALSE, fig.width=15, fig.cap='ACF plot - Number of Flights'}
+df %>% ACF(N_FLIGHTS, lag_max = 132) %>% 
+  autoplot() +
+  ggtitle('ACF plot - Number of Flights')
+```
+
+```{r, echo=FALSE, fig.width=15, fig.cap='ACF plot - Cancelation Rate'}
+df %>% ACF(CANC_RATE, lag_max = 132) %>% 
+  autoplot() +
+  ggtitle('ACF plot - Cancelation Rate')
+```
+
+To simplify our analysis, let's take a look at the first correlogram, regarding Ted Stevens Anchorage International on the number of flights: a clear seasonal pattern is displayed since the peaks tend to be 12 months apart and the troughs tend to be 6 months apart. Keeping in mind that we working with monthly flight data, is perfectly reasonable to think so (holidays seasons are expected to register an increase on flight numbers). 
+
+## 2. Decomposition and transformations
+
+After taking a look at the data and the multiples series we will work with, there is one needed transformation to be developed:
+
+  * Cancellation rate: transform it so that all values are between 0 and 1.
+  
+Note that, on the following code, a function is created to replace any 0 value by 0.00001 on the cancellation rate. This is needed so that it is possible to apply a log transformation on the rates.
+
+```{r, echo=TRUE, fig.width=15, warning=FALSE}
+
+bound_transform <- function(x, lower = 0,upper = 1){
+  x[x == 0] <- 0.00001
+  log((x - lower) / (upper - x))
+}
+
+inv_bound_transform <- function(x, lower = 0, upper = 1){
+  (upper - lower) * exp(x)/(1 + exp(x)) + lower
+}
+
+my_bound_transformation <- new_transformation(bound_transform, inv_bound_transform)
+```
+
+## 3. Forecaster Toolbox
+
+The next step it o fit the most basic models on our time series.
+The models used are the following: 
+
+  * Random Walk with Drift - forecasts equal to last value plus average change, controlling the growth rate of our time series;
+  * Snaive - forecasts equal to last value from same season;
+  * Naive - forecasts equal to last observed value;
+  * Trend
+  * Mean - forecasts equal to mean of historical data.
+  
+First, let's develop these analysis for the number of flights of each airport:
+
+### Number of flights
+
+```{r echo=FALSE, fig.width=15, warning=FALSE}
+ft_nf_fit <- df_train %>%
+  model(drift = RW(N_FLIGHTS ~ drift()),
+        snaive = SNAIVE(N_FLIGHTS),
+        naive = NAIVE(N_FLIGHTS),
+        trend = TSLM(N_FLIGHTS ~ trend()),
+        mean = MEAN(N_FLIGHTS))
+
+ft_nf_fc <- ft_nf_fit %>%
+  forecast(h='6 months')
+
+ft_nf_acc <- accuracy(ft_nf_fc, df_test) %>% 
+  select(c(Description,.model, ME, RMSE, MAE)) %>%
+  arrange(Description)
+knitr::kable(ft_nf_acc, caption = 'Basic models accuracy - Number of FLights')
+```
+
+After training and testing our models, the criterion to choose the most adequate amongst all possibilities is based on the ones that have the lowest RMSE on the test set.
+ 
+```{r, echo=FALSE, fig.width=15, warning=FALSE}
+knitr::kable(ft_nf_acc %>% group_by(Description) %>% slice_min(RMSE, n = 1),
+             caption = 'Best basic models - Number of Flights')
+```
+
+As you can see on the table above, Seasonal Naive models were the best across all airports for the number of flights. These will now be the models used on this sector of the project.
+
+Before analyzing in detail the residuals, first we will visualize the chosen models as well as the data for the four airports:
+
+```{r, echo=FALSE, fig.width=15, warning=FALSE}
+ft_ak_nf_model <- ak_train %>%
+  model(snaive = SNAIVE(N_FLIGHTS))
+
+ft_il_nf_model <- il_train %>%
+  model(snaive = SNAIVE(N_FLIGHTS))
+
+ft_ca_nf_model <- ca_train %>%
+  model(snaive = SNAIVE(N_FLIGHTS))
+
+ft_ny_nf_model <- ny_train %>%
+  model(snaive = SNAIVE(N_FLIGHTS))
+```
+
+```{r, echo=FALSE, fig.width=15, warning=FALSE,fig.cap='SNAIVE - AK: Ted Stevens Anchorage International - Number of Flights'}
+augment(ft_ak_nf_model) %>%
+  ggplot(aes(x = FL_DATE)) +
+  geom_line(aes(y = N_FLIGHTS, colour = "Data")) +
+  geom_line(aes(y = .fitted, colour = "Fitted")) +
+  xlab('') + ylab('Number of Flights') + 
+  ggtitle("SNAIVE - AK: Ted Stevens Anchorage International - Number of Flights")
+```
+
+```{r, echo=FALSE, fig.width=15, warning=FALSE, fig.cap="SNAIVE - IL: Chicago O’Hare International - Number of Flights"}
+augment(ft_il_nf_model) %>%
+  ggplot(aes(x = FL_DATE)) +
+  geom_line(aes(y = N_FLIGHTS, colour = "Data")) +
+  geom_line(aes(y = .fitted, colour = "Fitted")) +
+  xlab('') + ylab('Number of Flights') +
+  ggtitle("SNAIVE - IL: Chicago O’Hare International - Number of Flights")
+```
+
+```{r, echo=FALSE, fig.width=15, warning=FALSE, fig.cap="SNAIVE - CA: Los Angeles International - Number of Flights"}
+augment(ft_ca_nf_model) %>%
+  ggplot(aes(x = FL_DATE)) +
+  geom_line(aes(y = N_FLIGHTS, colour = "Data")) +
+  geom_line(aes(y = .fitted, colour = "Fitted")) +
+  xlab('') + ylab('Number of Flights') +
+  ggtitle("SNAIVE - CA: Los Angeles International - Number of Flights")
+```
+
+```{r, echo=FALSE, fig.width=15, warning=FALSE, fig.cap="SNAIVE - NY: LaGuardia - Number of Flights"}
+augment(ft_ny_nf_model) %>%
+  ggplot(aes(x = FL_DATE)) +
+  geom_line(aes(y = N_FLIGHTS, colour = "Data")) +
+  geom_line(aes(y = .fitted, colour = "Fitted")) +
+  xlab('') + ylab('Number of Flights') +
+  ggtitle("SNAIVE - NY: LaGuardia - Number of Flights")
+```
+
+To verify our models, we will now focus on the residuals. In order to visually check residuals correlations, the next four figures present the Scatter, Histogram and ACF plot of the residuals. Note that having spikes out of the region limited in blue, means errors are correlated, which is unwanted.
+
+```{r, echo=FALSE, fig.width=15, warning=FALSE, fig.cap='Residuals analysis - SNAIVE  - AK: Ted Stevens Anchorage International - Number of Flights'}
+ft_ak_nf_model %>% gg_tsresiduals() +
+  xlab('') +
+  ggtitle('Residuals analysis - SNAIVE  - AK: Ted Stevens Anchorage International - Number of Flights')
+```
+
+```{r, echo=FALSE, fig.width=15, warning=FALSE, fig.cap='Residuals analysis - SNAIVE - IL: Chicago O’Hare International - Number of Flights'}
+ft_il_nf_model %>% gg_tsresiduals() +
+  xlab('') +
+  ggtitle('Residuals analysis - SNAIVE  - IL: Chicago O’Hare International - Number of Flights')
+```
+
+```{r, echo=FALSE, fig.width=15, warning=FALSE, fig.cap='Residuals analysis - SNAIVE - CA: Los Angeles International - Number of Flights'}
+ft_ca_nf_model %>% gg_tsresiduals() +
+  xlab('') +
+  ggtitle('Residuals analysis - SNAIVE  - CA: Los Angeles International - Number of Flights')
+```
+
+
+```{r, echo=FALSE, fig.width=15, warning=FALSE, fig.cap='Residuals analysis - SNAIVE  - NY: LaGuardia - Number of Flights'}
+ft_ny_nf_model %>% gg_tsresiduals() +
+  xlab('') +
+  ggtitle('Residuals analysis - SNAIVE  - NY: LaGuardia - Number of Flights')
+```
+
+To verify our models, furthermore, we will now focus on the residuals through the Ljung box test – which allows us to test if the residuals are correlated.
+Note that:
+  * H0: the residuals are autocorrelated;
+  * H1: The residuals do not have autocorrelation.
+
+The goal is to have errors as white noise processes, and so reject H0 and for that, p-values have to be > 0.05 (95% significancy).
+
+```{r, echo=FALSE, fig.width=15, warning=FALSE}
+aug_ft_nf <- augment(ft_ak_nf_model) %>%
+  features(.resid, ljung_box, lag=24, dof=0) %>%
+  add_row(augment(ft_il_nf_model) %>%
+            features(.resid, ljung_box, lag=24, dof=0))%>%
+  add_row(augment(ft_ca_nf_model) %>%
+            features(.resid, ljung_box, lag=24, dof=0))%>%
+  add_row(augment(ft_ny_nf_model) %>%
+            features(.resid, ljung_box, lag=24, dof=0))
+knitr::kable(aug_ft_nf, caption = 'Ljung box test basic models - Number of Flights')
+```
+
+As we can see on table 3, none of the models have p-value > 0.05, which indicates us that these more basic models struggle to extract all the information from the data. We then need to test more complex models.
+
+### Cancellation Rate
+
+The exact same work is now developed for the series regarding Cancellation Rates.
+
+Start by training and testing the models.
+
+```{r, echo=FALSE, fig.width=15, warning=FALSE}
+ft_cr_fit <- df_train %>%
+  model(drift = RW(my_bound_transformation(CANC_RATE) ~ drift()),
+        snaive = SNAIVE(my_bound_transformation(CANC_RATE)),
+        naive = NAIVE(my_bound_transformation(CANC_RATE)),
+        trend = TSLM(my_bound_transformation(CANC_RATE) ~ trend()),
+        mean = MEAN(my_bound_transformation(CANC_RATE)))
+
+ft_cr_fc <- ft_cr_fit %>%
+  forecast(h='6 months')
+
+ft_cr_acc <- accuracy(ft_cr_fc, df_test) %>% 
+  select(c(Description,.model, ME, RMSE, MAE)) %>%
+  arrange(Description)
+knitr::kable(ft_cr_acc,  caption = 'Basic models accuracy - Cancelation Rate')
+```
+
+Choosing the models with the lowest RMSE on the test set, we now obtain the following models as the best ones:
+
+```{r, echo=FALSE, fig.width=15, warning=FALSE}
+knitr::kable(ft_cr_acc %>% group_by(Description) %>% slice_min(RMSE, n = 1),
+             caption = 'Best basic models - Cancellation Rate')
+```
+
+Once again, before looking at the residuals, we will plot the best models alongside with the data for the four airports: 
+
+```{r, echo=FALSE, fig.width=15, warning=FALSE}
+ft_ak_cr_model <- ak_train %>%
+  model(trend = TSLM(my_bound_transformation(CANC_RATE) ~ trend()))
+
+ft_il_cr_model <- il_train %>%
+  model(trend = TSLM(my_bound_transformation(CANC_RATE) ~ trend()))
+
+ft_ca_cr_model <- ca_train %>%
+  model(snaive = SNAIVE(my_bound_transformation(CANC_RATE)))
+
+ft_ny_cr_model <- ny_train %>%
+  model(trend = TSLM(my_bound_transformation(CANC_RATE) ~ trend()))
+```
+
+```{r, echo=FALSE, fig.width=15, warning=FALSE, fig.cap="TREND - AK: Ted Stevens Anchorage International - Cancellation Rate"}
+augment(ft_ak_cr_model) %>%
+  ggplot(aes(x = FL_DATE)) +
+  geom_line(aes(y = CANC_RATE, colour = "Data")) +
+  geom_line(aes(y = .fitted, colour = "Fitted")) +
+  xlab('') + ylab('Cancellation Rate') +
+  ggtitle("TREND - AK: Ted Stevens Anchorage International - Cancellation Rate")
+```
+
+```{r, echo=FALSE, fig.width=15, warning=FALSE, fig.cap="TREND - IL: Chicago O’Hare International - Cancellation Rate"}
+augment(ft_il_cr_model) %>%
+  ggplot(aes(x = FL_DATE)) +
+  geom_line(aes(y = CANC_RATE, colour = "Data")) +
+  geom_line(aes(y = .fitted, colour = "Fitted")) +
+  xlab('') + ylab('Cancellation Rate') +
+  ggtitle("TREND - IL: Chicago O’Hare International - Cancellation Rate")
+```
+
+```{r, echo=FALSE, fig.width=15, warning=FALSE, fig.cap="SNAIVE - CA: Los Angeles International - Cancellation Rate"}
+augment(ft_ca_cr_model) %>%
+  ggplot(aes(x = FL_DATE)) +
+  geom_line(aes(y = CANC_RATE, colour = "Data")) +
+  geom_line(aes(y = .fitted, colour = "Fitted")) +
+  xlab('') + ylab('Cancellation Rate') +
+  ggtitle("SNAIVE - CA: Los Angeles International - Cancellation Rate")
+```
+
+```{r, echo=FALSE, fig.width=15, warning=FALSE, fig.cap="TREND - NY: LaGuardia Cancelation - Cancellation Rate"}
+augment(ft_ny_cr_model) %>%
+  ggplot(aes(x = FL_DATE)) +
+  geom_line(aes(y = CANC_RATE, colour = "Data")) +
+  geom_line(aes(y = .fitted, colour = "Fitted")) +
+  xlab('') + ylab('Cancellation Rate') +
+  ggtitle("TREND - NY: LaGuardia Cancelation - Cancellation Rate")
+```
+
+As for the Number of flights, the next step is to analyze the residuals and test autocorrelation. Let’s first take a look at the Scatter, Histogram and  ACF plot of the residuals, in order to check if the autocorrelation is significant or not.
+
+```{r, echo=FALSE, fig.width=15, warning=FALSE, fig.cap='Residuals analysis - TREND  - AK: Ted Stevens Anchorage International - Cancellation Rate'}
+ft_ak_cr_model %>% gg_tsresiduals() +
+  xlab('') +
+  ggtitle('Residuals analysis - TREND  - AK: Ted Stevens Anchorage International - Cancellation Rate')
+```
+
+```{r, echo=FALSE, fig.width=15, warning=FALSE, fig.cap='Residuals analysis - TREND  - IL: Chicago O’Hare International - Cancellation Rate'}
+ft_il_cr_model %>% gg_tsresiduals() +
+  xlab('') +
+  ggtitle('Residuals analysis - TREND  - IL: Chicago O’Hare International - Cancellation Rate')
+```
+
+```{r, echo=FALSE, fig.width=15, warning=FALSE, fig.cap='Residuals analysis - SNAIVE  - CA: Los Angeles International - Cancellation Rate'}
+ft_ca_cr_model %>% gg_tsresiduals() +
+  xlab('') +
+  ggtitle('Residuals analysis - SNAIVE  - CA: Los Angeles International - Cancellation Rate')
+```
+
+```{r, echo=FALSE, fig.width=15, warning=FALSE, fig.cap='Residuals analysis - TREND  - NY: LaGuardia - Cancellation Rate'}
+ft_ny_cr_model %>% gg_tsresiduals() +
+  xlab('') +
+  ggtitle('Residuals analysis - TREND  - NY: LaGuardia - Cancellation Rate')
+```
+
+Note that, by looking at the ACF plots, it seems that the residuals of the model for AK airport series are uncorrelated (which is desired). We can also do a Ljung box test to prove this, as it follows:
+
+```{r, echo=FALSE, fig.width=15, warning=FALSE}
+aug_ft_cr <- augment(ft_ak_cr_model) %>%
+  features(.innov, ljung_box, lag=10, dof=0) %>%
+  add_row(augment(ft_il_cr_model) %>%
+            features(.innov, ljung_box, lag=10, dof=0))%>%
+  add_row(augment(ft_ca_cr_model) %>%
+            features(.innov, ljung_box, lag=24, dof=0))%>%
+  add_row(augment(ft_ny_cr_model) %>%
+            features(.innov, ljung_box, lag=10, dof=0))
+
+knitr::kable(aug_ft_cr, caption = 'Ljung box test basic models - Cancellation Rate')
+```
+
+In fact, p-value for the residuals of the AK series is > 0.05, which shows us that the errors are uncorrelated. 
+
+So, using 6 months predictions to test our models, the best are the following:
+
+Number of flights:
+	Alaska: snaive
+	Illinois: snaive
+	Chicago: snaive
+	New York: snaive
+
+Cancellation Rate:
+	Alaska: trend
+	Illinois: trend
+	Chicago: snaive
+	New York: trend
+
+## 4. Exponencial Smoothing for the airport of Chicago
+
+To simplify our analysis, we will focus our attention on the number of flights of the Chicago airport and cancellation rate of the New York airport to develop exponential smoothing models.
+
+Exponential smoothing models (ETS) are “divided” in three components:
+
+	Error – which can be either additive or multiplicative;
+	Trend – which can be non-existing, additive, multiplicative or damped;
+	Seasonality – which can be none existing, additive or multiplicative.
+
+We will use a STL decomposition to choose the category  for each component
+
+### Number of flights
+
+```{r, echo=FALSE, fig.width=15, warning=FALSE, fig.cap= 'STL decomposition - IL: Chicago O’Hare International - Number of Flights'}
+il %>% model(
+  STL(N_FLIGHTS)) %>%
+  components() %>%
+  autoplot() +
+  ggtitle('STL decomposition - IL: Chicago O’Hare International - Number of Flights')
+```
+
+So, after analyzing the decomposition, we considered:
+
+**Error** = A: The errors’ variance stays constant, so we considered this parameter as Additive.  
+**Trend** = N: The trend component stays fairly constant, meaning we fixed the parameter as None.  
+**Season** = A: As the variance of the seasonality component also stays constant, the parameter was considered to be Additive.  
+
+We also tested the auto model, which looks to find the “best” possible combination of the parameters for the given data:
+
+```{r, echo=FALSE, fig.width=15, warning=FALSE}
+es_il_nf_fit <- il_train %>%
+  model(
+    ana = ETS(N_FLIGHTS ~ error('A') + trend('N') + season('A')),
+    auto = ETS(N_FLIGHTS)
+  )
+knitr::kable(es_il_nf_fit, caption = 'ETS models - IL: Chicago O’Hare International - Number of Flights')
+```
+
+As described on the table above, the automatic model is the same as the one we considered. This will result on the same results, when looking at performance criterions.  
+
+```{r, echo=FALSE, fig.width=15, warning=FALSE}
+knitr::kable(glance(es_il_nf_fit), caption='ETS metrics - IL: Chicago O’Hare International - Number of Flights')
+```
+
+On the following figure, we can now look at the ETS model as well as the data.
+
+```{r, echo=FALSE, fig.width=15, warning=FALSE, fig.cap='ETS(A,N,A) - IL: Chicago O’Hare International - Number of Flights'}
+es_il_nf_model <- es_il_nf_fit %>%
+  select(Description, ana)
+
+augment(es_il_nf_fit) %>%
+  ggplot(aes(x = FL_DATE)) +
+  geom_line(aes(y = N_FLIGHTS, colour = "Data")) +
+  geom_line(aes(y = .fitted, colour = "Fitted")) +
+  ylab('Number of Flights') + xlab('') + 
+  ggtitle("ETS(A,N,A) - IL: Chicago O’Hare International - Number of Flight")
+```
+
+### Cancellation Rate
+
+Just as for the most basic models, the same procedure is now applied to the Cancellation Rate series, starting with visualizing the STL decomposition in order to decide on the Error, Trend and Seasonal parameters.
+
+Once again, to simplify, the detailed analysis will only be developed step by step for one airport: this time for La Guardia, New York.
+
+```{r, echo=FALSE, fig.width=15, warning=FALSE, fig.cap = 'STL decomposition - NY: LaGuardia - Cancellation Rate'}
+ny %>% model(
+  STL(CANC_RATE)) %>%
+  components() %>%
+  autoplot() + ggtitle('STL decomposition - NY: LaGuardia - Cancellation Rate')
+
+```
+
+The following was considered regarding the parameters:
+
+**Error** = A: The errors’ variance remains constant, so it was assigned Additive.  
+**Trend** = N: The trend also remains fairly constant, having been considered as None.  
+**Season** = M: As the variance of the seasonality component grows throughout time, this parameter was considered Multiplicative.  
+
+Once again, the automatic model was also trained, this time being different from ours, having Additive seasonal component:
+
+```{r, echo=FALSE, fig.width=15, warning=FALSE}
+es_ny_cr_fit <- ny_train %>%
+  model(
+    anm = ETS(my_bound_transformation(CANC_RATE) ~ error('A') + trend('N') + season('M')),
+    auto = ETS(my_bound_transformation(CANC_RATE))
+  )
+knitr::kable(es_ny_cr_fit, caption = 'ETS models - NY: LaGuardia - Cancellation Rate')
+```
+
+Analyzing the AICc of both models, the automatic one seems better than the one we proposed.
+
+```{r, echo=FALSE, fig.width=15, warning=FALSE}
+knitr::kable(glance(es_ny_cr_fit), caption = 'ETS metrics - NY: LaGuardia - Cancellation Rate')
+```
+
+Contrary to what happened for the number of flights, for the cancellation rate, our model was different than the one provided by the automatic function, which leads us to three different lines on the plot – one for each model and a third for the data itself.
+
+```{r echo=FALSE, fig.width=15, warning=FALSE, fig.cap='ETS(A,N,M) & ETS(A,N,A) - NY: LaGuardia - Cancellation Rate'}
+augment(es_ny_cr_fit) %>%
+  ggplot(aes(x = FL_DATE)) +
+  geom_line(aes(y = CANC_RATE, colour = "Data")) +
+  geom_line(aes(y = .fitted,  group = interaction(.model), colour = .model)) +
+  ylab('Cancellation Rate') + xlab('') +
+  ggtitle("ETS(A,N,M) & ETS(A,N,A) - NY: LaGuardia - Cancellation Rate")
+```
+
+```{r echo=FALSE, fig.width=15, warning=FALSE}
+es_ny_cr_model <- es_ny_cr_fit %>%
+  select(Description, auto) %>% rename(ana = auto)
+```
+
+## 5. ARIMA
+
+### Number of Flights of IL: Chicago O'Hare International
+
+After considering the models previously described, it is now time to develop ARIMA models – models that take into account temporal dependency. 
+Note that it is required to have stationary time series. For a series to be stationary both the mean and variance have to be constant over time. Plus, the covariance between observations also has to be constant (at most depending on the lag).
+
+So, first, let’s look at the data and check if there is the need to apply first differences and/or seasonal differences. (Working for the Chicago O’Hare airport)
+
+```{r, echo=FALSE, fig.width=15, warning=FALSE, fig.cap='ACF & PACF - IL: Chicago O\'Hare International - Number of Fligts'}
+il %>%
+  gg_tsdisplay(N_FLIGHTS,
+               plot_type='partial', lag=48) +
+  labs(title="ACF & PACF - IL: Chicago O\'Hare International - Number of Fligts", 
+       y="Number of Fligts", x='')
+```
+
+Looking at the data, we will apply both first differences and seasonal differences in order to get a stationary series.
+
+```{r, echo=FALSE, fig.width=15, warning=FALSE, fig.cap='ACF & PACF - IL: Chicago O\'Hare International (Season diff + Reg diff) - Number of Fligts'}
+il %>%
+  gg_tsdisplay(difference(N_FLIGHTS, 12) %>% difference(),
+               plot_type='partial', lag=48) +
+  labs(title = "ACF & PACF - IL: Chicago O\'Hare International (Season diff + Reg diff) - Number of Fligts", 
+       y="Number of Fligts: Season diff + Reg diff", x='')
+```
+
+After getting a stationary series and looking at both ACF and PACF to decide on the Moving Average part and   Autoregressive part, respectively, several were proposed, as well as the auto arima (developed by Hyndman). 
+Note that, for each model, the second parameter is set to 1 which corresponds to applying first differences.
+
+  * ARIMA(0,1,0)(0,1,1): The acf shows a spike at lag 12, which suggest a SMA(1).
+  * ARIMA(0,1,0)(0,1,2): The acf shows a spike at lag 12 and 24, which suggest a SMA(2).
+  * ARIMA(0,1,0)(1,1,2): The acf and pacf shows a spike at lag 12, which suggest a SAR(1) and SMA(1).
+  * ARIMA(0,1,0)(1,1,2): The acf and pacf shows a spike at lag 12, which suggest a SAR(1) and SMA(2).
+  * ARIMA(0,1,0)(2,1,2): The acf and pacf shows a spike at lag 12 and 24, which suggest a SAR(2) and a SMA(2).
+  * Auto: ARIMA(0,1,0)(2,1,0).  
+
+```{r, echo=FALSE, fig.width=15, warning=FALSE}
+arima_il_nf_fit <- il_train %>%
+  model(
+    arima010011 = ARIMA(N_FLIGHTS ~ pdq(0,1,0) + PDQ(0,1,1)),
+    arima010012 = ARIMA(N_FLIGHTS ~ pdq(0,1,0) + PDQ(0,1,2)),
+    arima010111 = ARIMA(N_FLIGHTS ~ pdq(0,1,0) + PDQ(1,1,1)),
+    arima010112 = ARIMA(N_FLIGHTS ~ pdq(0,1,0) + PDQ(1,1,2)),
+    arima010212 = ARIMA(N_FLIGHTS ~ pdq(0,1,0) + PDQ(2,1,2)),
+    auto = ARIMA(N_FLIGHTS ~  pdq(d = 1) + PDQ(D = 1)))# stepwise = FALSE, approx = FALSE)) 
+```
+
+```{r, echo=FALSE, fig.width=15, warning=FALSE}
+lb_arima_il_nf <-
+  augment(arima_il_nf_fit %>% select(arima010011)) %>%
+  features(.innov, ljung_box, lag=24, dof=1) %>%
+  add_row(augment(arima_il_nf_fit %>% select(arima010012)) %>%
+    features(.innov, ljung_box, lag=24, dof=2)) %>%
+  add_row(augment(arima_il_nf_fit %>% select(arima010111)) %>%
+    features(.innov, ljung_box, lag=24, dof=2)) %>%
+  add_row(augment(arima_il_nf_fit %>% select(arima010112)) %>%
+    features(.innov, ljung_box, lag=24, dof=3)) %>%
+  add_row(augment(arima_il_nf_fit %>% select(arima010212)) %>%
+    features(.innov, ljung_box, lag=24, dof=4)) %>%
+  add_row(augment(arima_il_nf_fit %>% select(auto)) %>%
+    features(.innov, ljung_box, lag=24, dof=2))
+
+knitr::kable(lb_arima_il_nf, caption = 'Ljung box test ARIMA models - IL: Chicago O\'Hare International - Number of Flights')
+```
+
+Looking at the Ljung box test we can see that all models reject the H0 and this means that the errors are uncorrelated.
+
+```{r, echo=FALSE, fig.width=15, warning=FALSE}
+arima_il_nf_glance <- arima_il_nf_fit %>% 
+  glance() %>%
+  select(-c(ar_roots,ma_roots)) %>%
+  arrange(AICc)
+knitr::kable(arima_il_nf_glance, caption = 'ARIMA metrics - IL: Chicago O\'Hare International - Number of Flights ')
+```
+
+By analyzing the AICc of the models, note that an ARIMA(0,1,0)(2,1,2) has the best performance. On the next plot the fitted model is presented on top of the data:
+
+```{r, echo=FALSE, fig.width=15, warning=FALSE, fig.cap='ARIMA(0,1,0)(2,1,2) - IL: Chicago O\'Hare International -  Number of Fligts'}
+arima_il_nf_model <- arima_il_nf_fit %>%
+  select(Description, arima010212)
+
+augment(arima_il_nf_model) %>%
+  ggplot(aes(x = FL_DATE)) +
+  geom_line(aes(y = N_FLIGHTS, colour = "Data")) +
+  geom_line(aes(y = .fitted, colour = 'Fitted')) +
+  ylab('Number of Flights') + xlab('') +
+  ggtitle("ARIMA(0,1,0)(2,1,2) - IL: Chicago O\'Hare International -  Number of Fligts")
+```
+
+### Cancelation Rate of New York, NY: LaGuardia
+
+Similarly to the ETS models, for the Cancellation Rate, we will focus on the La Guardia airport, New York.
+
+The first step is, once again, to plot the data and check for the need of differences.
+
+
+```{r, echo=FALSE, fig.width=15, warning=FALSE, fig.cap="ACF & PACF - NY: LaGuardia - Cancellation Rate"}
+ny %>%
+  gg_tsdisplay(CANC_RATE,
+               plot_type='partial', lag=48) +
+  labs(title = "ACF & PACF - NY: LaGuardia - Cancellation Rate", 
+       y="Number of Flights", x='')
+```
+
+We decided not to apply any differences, since the series seems fairly stationary. Focusing on the ACF and PACF, we thought the following were reasonable:
+
+  * ARIMA(0,0,1)(0,0,1): The ACF shows a spike at lag 1, which suggests a MA(1). Plus, there is also a spike at lag 12, suggesting a SMA(1). Regarding the PACF it is gradually decaying.
+  * ARIMA(0,0,1)(1,0,0): Once again, the spike at lag 1 from the ACF suggests a MA(1). Spotting seasonality on this time series leads us to try a SAR(1).
+  * ARIMA(0,0,3)(0,0,1): The ACF shows a spike at lag 3, which suggests a MA(3). Plus, there is also a spike at lag 12, suggesting a SMA(1). Regarding the PACF it is gradually decaying.
+  * ARIMA(0,0,3)(1,0,0): Once again, the spike at lag 3 from the ACF suggests a MA(3). Spotting seasonality on this time series leads us to try a SAR(1).
+  * Auto: ARIMA(0,0,1)(1,0,0).
+
+```{r, echo=FALSE, fig.width=15, warning=FALSE}
+arima_ny_cr_fit <- ny_train %>%
+  model(
+    arima001001 = ARIMA(my_bound_transformation(CANC_RATE) ~ pdq(0,0,1) + PDQ(0,0,1)),
+    arima001100 = ARIMA(my_bound_transformation(CANC_RATE) ~ pdq(0,0,1) + PDQ(1,0,0)),
+    arima003001 = ARIMA(my_bound_transformation(CANC_RATE) ~ pdq(0,0,3) + PDQ(0,0,1)),
+    arima003100 = ARIMA(my_bound_transformation(CANC_RATE) ~ pdq(0,0,3) + PDQ(1,0,0)),
+    auto = ARIMA(my_bound_transformation(CANC_RATE) ~  pdq(d = 0) + PDQ(D = 0)))# stepwise = FALSE, approx = FALSE)) 
+```
+
+```{r, echo=FALSE, fig.width=15, warning=FALSE}
+lb_arima_ny_cr <- 
+  augment(arima_ny_cr_fit %>% select(arima001001)) %>%
+  features(.innov, ljung_box, lag=24, dof=2) %>%
+  add_row(augment(arima_ny_cr_fit %>% select(arima001100)) %>%
+    features(.innov, ljung_box, lag=24, dof=2)) %>%
+  add_row(augment(arima_ny_cr_fit %>% select(arima003001)) %>%
+    features(.innov, ljung_box, lag=24, dof=4)) %>%
+  add_row(augment(arima_ny_cr_fit %>% select(arima003100)) %>%
+    features(.innov, ljung_box, lag=24, dof=4)) %>%
+  add_row(augment(arima_ny_cr_fit %>% select(auto)) %>%
+    features(.innov, ljung_box, lag=24, dof=2))
+
+knitr::kable(lb_arima_ny_cr, caption ='Ljung box test ARIMA models - NY: LaGuardia - Cancelation Rate')
+``` 
+
+Looking at the Ljung box test we can see that all models reject the H0 and this means that the errors are uncorrelated.
+
+```{r, echo=FALSE, fig.width=15, warning=FALSE}
+arima_ny_cr_glance <- 
+  arima_ny_cr_fit %>% 
+  glance() %>%
+  select(-c(ar_roots,ma_roots)) %>%
+  arrange(AICc)
+knitr::kable(arima_ny_cr_glance, caption = 'ARIMA metrics - NY: LaGuardia - Cancellation Rate')
+```
+
+After analyzing the AICc criterion, the ARIMA(0,0,1)(1,0,0) proved to have the best results, being plotted as it follows:
+
+```{r, echo=FALSE, fig.width=15, warning=FALSE, fig.cap='ARIMA(0,0,1)(1,0,0) - NY: LaGuardia - Cancellation Rate'}
+arima_ny_cr_model <- arima_ny_cr_fit %>%
+  select(Description, arima001100)
+
+augment(arima_ny_cr_model) %>%
+  ggplot(aes(x = FL_DATE)) +
+  geom_line(aes(y = CANC_RATE, colour = "Data")) +
+  geom_line(aes(y = .fitted, colour = 'Fitted')) +
+  ylab('Cancellation Rate') + xlab('') +
+  ggtitle("ARIMA(0,0,1)(1,0,0) - NY: LaGuardia - Cancellation Rate")
+```
+
+## 6. Model comparision
+
+On this stage of the project, we aim at comparing the models previously trained and tested. 
+
+### Number of flights
+
+The following table compiles the models detailed on the previous stages, for each airport, regarding the number of flights:
+
+```{r, echo=FALSE, fig.width=15, warning=FALSE}
+##California
+final_il_nf_models <- ft_il_nf_model %>% 
+  add_column(es_il_nf_model%>% select(ana)) %>%
+  add_column(arima_il_nf_model %>% select(arima010212)) %>%
+  as_mable(key = Description, model = c(snaive,ana,arima010212))
+
+final_il_nf_fc <- final_il_nf_models %>%
+  forecast(h='6 months')
+
+#Rest of the airports
+final_nf_models <- df_train %>%
+  filter(Description != 'Chicago, IL: Chicago O\'Hare International') %>%
+  model(drift = RW(N_FLIGHTS ~ drift()),
+        snaive = SNAIVE(N_FLIGHTS),
+        naive = NAIVE(N_FLIGHTS),
+        trend = TSLM(N_FLIGHTS ~ trend()),
+        mean = MEAN(N_FLIGHTS),
+        ets = ETS(N_FLIGHTS),
+        arima = ARIMA(N_FLIGHTS))#stepwise = FALSE, approx = FALSE
+
+final_nf_fc <- final_nf_models %>%
+  forecast(h = '6 months')
+```
+
+```{r, echo=FALSE, fig.width=15, warning=FALSE}
+final_nf_acc <- accuracy(final_nf_fc, df_test) %>%
+  add_row(accuracy(final_il_nf_fc, df_test)) %>%
+  arrange(Description) %>%
+  select(c(Description,.model,ME,RMSE,MAE))
+knitr::kable(final_nf_acc, caption = 'Models accuracy - Number of flights')
+```
+
+“Competition” for the best models has the following winners, for each airport:
+
+```{r final_nf_acc, echo=FALSE, fig.width=15, warning=FALSE}
+knitr::kable(final_nf_acc%>% 
+               group_by(Description) %>% 
+               slice_min(RMSE, n = 1), caption = 'Best models - Number of Flights')
+```
+
+An important stage of any project of this nature is to produce and plot forecasts. To not turn the report too extensive, forecasts will be displayed only for the Chicago O’Hare airport – using the best model amongst all trained (which was the ARIMA(0,1,0)(2,1,2).
+
+```{r, echo=FALSE, fig.width=15, warning=FALSE, fig.cap='Forecast - ARIMA(0,1,0)(2,1,2) - IL: Chicago O\'Hare International - Number of Flights'}
+final_il_nf_fc %>% 
+  filter(.model == 'arima010212') %>%
+  autoplot(df) +
+  labs(y = "Number of Flights", x='',
+       title = "Forecast - ARIMA(0,1,0)(2,1,2) - IL: Chicago O\'Hare International - Number of Flights")
+```
+
+### Cancelation rate
+
+The same process is applied to the Cancellation Rate series:
+
+```{r, echo=FALSE, fig.width=15, warning=FALSE}
+##New York
+final_ny_cr_models <- ft_ny_cr_model %>% 
+  add_column(es_ny_cr_model%>% select(ana)) %>%
+  add_column(arima_ny_cr_model %>% select(arima001100)) %>%
+  as_tibble() %>%
+  as_mable(key = Description, model = c(trend,ana,arima001100))
+
+final_ny_cr_fc <- final_ny_cr_models %>%
+  forecast(h='6 months')
+
+
+#Rest of the airports
+final_cr_models <- df_train %>%
+  filter(Description != 'New York, NY: LaGuardia') %>%
+  model(drift = RW(my_bound_transformation(CANC_RATE) ~ drift()),
+        snaive = SNAIVE(my_bound_transformation(CANC_RATE)),
+        naive = NAIVE(my_bound_transformation(CANC_RATE)),
+        trend = TSLM(my_bound_transformation(CANC_RATE) ~ trend()),
+        mean = MEAN(my_bound_transformation(CANC_RATE)),
+        ets = ETS(my_bound_transformation(CANC_RATE)),
+        arima = ARIMA(my_bound_transformation(CANC_RATE)))#stepwise = FALSE, approx = FALSE
+
+final_cr_fc <- final_cr_models %>%
+  forecast(h = '6 months')
+
+final_cr_acc <- accuracy(final_cr_fc, df_test) %>%
+  add_row(accuracy(final_ny_cr_fc, df_test)) %>%
+  arrange(Description) %>%
+  select(c(Description,.model,ME,RMSE,MAE))
+knitr::kable(final_cr_acc, caption = 'Models accuracy - Cancellation rate')
+```
+
+This time, winners are the next models:
+
+```{r, echo=FALSE, fig.width=15, warning=FALSE}
+knitr::kable(final_cr_acc %>% 
+               group_by(Description) %>% 
+               slice_min(RMSE, n = 1), caption = 'Best models - Cancellation Rate')
+```
+
+The forecasts are produced and displayed using the ARIMA(0,0,1)(1,0,0) for La Guardia airport, New York:
+  
+```{r, echo=FALSE, fig.width=15, warning=FALSE, fig.cap='Forecast - ARIMA(0,0,1)(1,0,0) - NY: LaGuardia - Cancellation Rate'}
+final_ny_cr_fc %>% 
+  filter(.model == 'arima001100') %>%
+  autoplot(df) +
+  labs(y = "Cancellation rate", x='',
+       title = "Forecast - ARIMA(0,0,1)(1,0,0) - NY: LaGuardia - Cancellation Rate")
+```
+
+## 7. Impact of Covid-19 in our models accuracy
+
+The final segment of this project covers the impact of covid19 on the numbers of the airports. To develop the previous models, 2020 was excluded since it was such an atypical year translated to fairly unstable flight data.
+
+The process on this stage is to take the best models produced before, for each airport and for both number of flights and cancellation rates and re-train and test them, using as test date the 2020 period.
+
+### Number of flights
+
+Before we dive into the analysis, data regarding 2020 number of flights is displayed:
+
+```{r, echo=FALSE, fig.width=15, warning=FALSE, fig.cap='Airports 2020 - Number of Flights'}
+df_2020 %>%
+  autoplot(N_FLIGHTS) +
+  labs(y = "Number of Flights", x='',
+       title = "Airports 2020 - Number of Flights")
+```
+
+As seen above, the number of flights suffered an intense decrease since around March 2020.
+
+Next, we compare models’ accuracy from post and pre covid:
+
+```{r, echo=FALSE, fig.width=15, warning=FALSE}
+ak_2020_nf_fit <- ak %>%
+  model(arima = ARIMA(N_FLIGHTS ~ pdq(1,0,0) + PDQ(0,1,1)))
+
+il_2020_nf_fit <- il %>%
+  model(arima010212 = ARIMA(N_FLIGHTS ~ pdq(0,1,0) + PDQ(2,1,2)))
+
+ca_2020_nf_fit <- ca %>% model(snaive = SNAIVE(N_FLIGHTS))
+
+ny_2020_nf_fit <- ny %>%
+  model(ets = ETS(N_FLIGHTS ~ error('A') + trend('N') + season('A')))
+
+ak_2020_nf_fc <- ak_2020_nf_fit %>%
+  forecast(h = '12months')
+
+il_2020_nf_fc <- il_2020_nf_fit %>%
+  forecast(h = '12months')
+
+ca_2020_nf_fc <- ca_2020_nf_fit %>%
+  forecast(h = '12months')
+
+ny_2020_nf_fc <- ny_2020_nf_fit %>%
+  forecast(h = '12months')
+```
+
+-Post Covid
+
+```{r, echo=FALSE, fig.width=15, warning=FALSE}
+pos_2020_nf_acc <- accuracy(ak_2020_nf_fc,df_2020) %>%
+  add_row(accuracy(il_2020_nf_fc,df_2020)) %>%
+  add_row(accuracy(ca_2020_nf_fc,df_2020)) %>%
+  add_row(accuracy(ny_2020_nf_fc,df_2020)) %>%
+  select(c(Description, .model,ME,RMSE,MAE))
+
+knitr::kable(pos_2020_nf_acc, caption = 'Models accuracy post 2020 - Number of Flights')
+```
+
+By considering 2020 to test our models, the RMSE is considerably higher than what is obtained by not considering that period (Table 18). This is expected by the instability described above.
+
+By taking a look at the forecasts produced regarding the Chicago O’Hare airport, this difference is evident: 
+
+```{r, echo=FALSE, fig.width=15, warning=FALSE, fig.cap='Forecast 2020 - ARIMA(0,1,0)(2,1,2) - IL: Chicago O’Hare International - Number of Flights'}
+il_2020_nf_fc %>% 
+  autoplot(bind_rows(df, df_2020)) +
+  labs(y = "Number of Flights", x='',
+       title = "Forecast 2020 - ARIMA(0,1,0)(2,1,2) - IL: Chicago O’Hare International - Number of Flights")
+```
+
+### Cancelation rate  
+
+Just as for the number of flights, we will now analyze data concerning the cancellation rate taking 2020 into consideration. A significant increase is expected. 
+
+```{r, echo=FALSE, fig.width=15, warning=FALSE, fig.cap='Airports 2020 - Cancellation Rate'}
+df_2020 %>%
+  autoplot(CANC_RATE) +
+  labs(y = "Cancellation Rate", x='',
+       title = "Airports 2020 - Cancellation Rate")
+```
+
+Note that, as expected an increase of cancellation rates was seen. Comparing the four airports in study, Ted Stevens, AK, suffered the least increase whereas La Guardia, NY had the highest rate of cancellations at around April.
+
+Once again the best models for each airport will now be trained using all data (until December 2019) and then tested on the critical period (2020).
+
+```{r, echo=FALSE, fig.width=15, warning=FALSE}
+ak_2020_cr_fit <- ak %>%
+  model(ets = ETS(my_bound_transformation(CANC_RATE) ~ error('A') + trend('N') + season('A')))
+
+il_2020_cr_fit <- il %>%
+  model(ets = ETS(my_bound_transformation(CANC_RATE) ~ error('A') + trend('N') + season('A')))
+
+ca_2020_cr_fit <- ca %>% 
+  model(snaive = SNAIVE(N_FLIGHTS))
+
+ny_2020_cr_fit <- ny %>%
+  model(arima001100 = ARIMA(my_bound_transformation(CANC_RATE) ~ pdq(0,0,1) + PDQ(1,0,0)))
+
+ak_2020_cr_fc <- ak_2020_cr_fit %>%
+  forecast(h = '12months')
+
+il_2020_cr_fc <- il_2020_cr_fit %>%
+  forecast(h = '12months')
+
+ca_2020_cr_fc <- ca_2020_cr_fit %>%
+  forecast(h = '12months')
+
+ny_2020_cr_fc <- ny_2020_cr_fit %>%
+  forecast(h = '12months')
+```
+
+-Post Covid
+
+```{r, echo=FALSE, fig.width=15, warning=FALSE}
+pos_2020_cr_acc <- accuracy(ak_2020_cr_fc,df_2020) %>%
+  add_row(accuracy(il_2020_cr_fc,df_2020)) %>%
+  add_row(accuracy(ca_2020_cr_fc,df_2020)) %>%
+  add_row(accuracy(ny_2020_cr_fc,df_2020)) %>%
+  select(c(Description, .model,ME,RMSE,MAE))
+
+knitr::kable(pos_2020_cr_acc, caption = 'Models accuracy post 2020 - Cancellation Rate')
+```
+
+As expected, if we take a look at the RMSE from our models, there is a significant increase when including 2020 data comparing with the pre 2020 results (Table 20), particularly for the snaive model (modelled Los Angeles International data). 
+
+This is clearly observable when plotting forecasts for 2020 and compare them with the real data. On the following plot, this comparison is displayed for La Guardia, NY. The model estimated much lower cancellation rates, not being able to respond to such unprecedented changes.
+
+```{r, echo=FALSE, fig.width=15, warning=FALSE, fig.cap='Forecast 2020 - ARIMA(0,0,1)(1,0,0) - NY: LaGuardia - Cancelation Rate'}
+il_2020_cr_fc %>% 
+  autoplot(bind_rows(df, df_2020)) +
+  labs(y = "Cancelation Rate", x='',
+       title = "Forecast 2020 - ARIMA(0,0,1)(1,0,0) - NY: LaGuardia - Cancelation Rate")
+```
+
+## Conclusion
+
+  Reaching the end of this project, we now have a better understanding on how to go from historical data to being able to produce considerably accurate forecasts.
+	In fact, one thing that stood our attention was the different ways each model “looks” at data, fitting it in its own way. As described through the project, we want to focus on different sets of models, analyze its properties and assumptions to then compare and come up with the best that we could produce. Note that for each airport, the most appropriate model was different when working with the number of flights and working with the cancellation rate. For example, for La Guardia, New York, on the time series for the number of flights, the best model was an ETS, whereas for the cancellation rate it was an ARIMA(0,0,1)(1,0,0).
+	As was stated on the introduction, one other goal of this project was to compare 2020 data when using the models produced without considering this period. 2020 was a difficult year across all industries – including the aviation industry. Surely the number of flights suffered a fall at around March/April and the cancellation rates increased on a big scale. By comparing our previously trained and tested models excluding 2020, we then noticed an increase on the errors produced (as described on section 7 of this report). We surely hope numbers will go back to “normal” in the future and the industry is capable of recovering from such a tough period.
+	To conclude, we are now more capable of analyzing time series, understating their features and singularities, and treat them in order to produce accurate forecasts.
