@@ -39,7 +39,7 @@ On the folder, you will find <b>4 documents: </b>
   - <b><i>README.md</i></b> : this document describing all data sets used and what was developed in the project;
   
   
-  - <b><i>data_preparation.R</i></b> : a R script to load all csv files and aggregate the data by month and airport for further on the analysis.
+  - <b><i>data_preparation.R</i></b> : a R script to load all csv files and aggregate the data by month and airport for further on the analysis. (To run this Rmd set the directory of RStudio to Data/Folder of the Unziped Data.)
 
 
   - <b><i>report.Rmd</i></b> : a Rmarkdown where we analyse the data. (To run this Rmd set the directory of RStudio to where this file is saved.)
