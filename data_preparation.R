@@ -1,5 +1,3 @@
-setwd("C:/Users/andre/OneDrive - ISEG/Data Analytics for Businiess/2nd Semester/Forcasting Methods (FM)/Group Project/Data/FLIGHTS_DATA")
-
 library('tidyverse')
 library('fpp3')
 
