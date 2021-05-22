@@ -42,7 +42,7 @@ On the folder, you will find <b>4 documents: </b>
   - <b><i>data_preparation.R</i></b> : a R script to load all csv files and aggregate the data by month and airport for further on the analysis.
 
 
-  - <b><i>report.Rmd</i></b> : a Rmarkdown where we analyse the data.
+  - <b><i>report.Rmd</i></b> : a Rmarkdown where we analyse the data. (To run this Rmd set the directory of RStudio to where this file is saved.)
 
    
   - <b><i>report.pdf</i></b> : a PDF file with the Rmarkdown output.
